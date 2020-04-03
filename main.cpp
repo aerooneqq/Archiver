@@ -1,6 +1,5 @@
 #include <iostream>
-
-#include <time.h> 
+#include <chrono> 
 
 #include "Archiver.h"
 #include "Util.h"
@@ -38,39 +37,42 @@ size_t compareFiles(const std::string firstFile, const std::string secondFile)
     }
 }
 
+std::chrono::nanoseconds measureExecutionTime(void (Archiver::*func)(const std::string input, const std::string out),
+                                              Archiver* archiver, std::string inputFile, std::string outFile)
+{   
+    auto start = std::chrono::steady_clock::now();
+    (archiver->*func)(inputFile, outFile);
+    auto end = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+}
+
 int main()
 {
     int filesCount = 9;
-    std::string* fileNames = new std::string[9] {"6.jpg", "2.docx", "1.txt", "3.pptx", "4.pdf", 
-        "5.dll", "7.jpg", "8.bmp", "9.bmp"};
+    std::string* fileNames = new std::string[9] {"5.dll", "7.jpg", "8.bmp", "9.bmp", "4.pdf", "1.txt", "2.docx", "6.jpg", "3.pptx" };
 
     int archiverLength = 4;
-    Archiver** archivers = new Archiver*[4] {new LZ77Archiver(4 * 1024, 1024), new Shannon(), 
+    Archiver** archivers = new Archiver*[4] {new Shannon(), new LZ77Archiver(4 * 1024, 1024), 
                                              new LZ77Archiver(8 * 1024, 2 * 1024), new LZ77Archiver(16 * 1024, 4 * 1024)};
 
     for (int i = 0; i < filesCount; ++i)
     {
         std::string fileName = "./DATA/" + fileNames[i];
-        std::cout << fileName << "\n";
+        std::cout << fileName << "\n\n";
         for (int j = 0; j < archiverLength; ++j)
         {
-            std::string res = archivers[j]->GetShortName();
+            std::string archivedFileName =  fileName + "." + archivers[j]->GetShortName();
+            std::string dearchivedFileName =  fileName + ".un" + archivers[j]->GetShortName();
 
-            clock_t start = clock();
-            archivers[j]->Archive(fileName, fileName + "." + archivers[j]->GetShortName());
-            clock_t end = clock();
-            
-            std::cout << "Archiving time: " << (double)(end - start) / CLOCKS_PER_SEC;
+            auto archiveTime = measureExecutionTime(Archiver::Archive, archivers[j], fileName, archivedFileName);
+            auto dearchivedTime = measureExecutionTime(Archiver::Dearchive, archivers[j], archivedFileName, dearchivedFileName);
 
-            start = clock();
-            archivers[j]->Dearchive(fileName + "." + archivers[j]->GetShortName(), fileName + ".un" + archivers[j]->GetShortName());
-            end = clock();
-
-            std::cout << "Dearchiving time: " << (double)(end - start) / CLOCKS_PER_SEC;
+            std::cout << archivers[j]->GetShortName() << " " << "Archive time: " << archiveTime.count() / 1000000000.0 << "\n";
+            std::cout << archivers[j]->GetShortName() << " " << "Dearchive time: " << dearchivedTime.count() / 1000000000.0 << "\n";
 
             std::cout << compareFiles(fileName, fileName + ".un" + archivers[j]->GetShortName()) << "\n";
         }
     }
-    
-    delete fileNames;
+ 
+    delete[] fileNames;
 }

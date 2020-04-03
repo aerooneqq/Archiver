@@ -197,7 +197,11 @@ public:
     void Write(std::vector<unsigned char>* bytes)
     {
         fileStream->write((char *)(&bytes->at(0)), bytes->size());
-        fileStream->flush();
+    }
+
+    void WriteByte(unsigned char byte)
+    {
+        fileStream->write((char*)(&byte), 1);
     }
 
     ~FileWriter()

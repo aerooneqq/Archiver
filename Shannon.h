@@ -5,7 +5,7 @@
 #include <algorithm>
 #include "math.h"
 
-typedef long long ll;
+typedef unsigned long long int ll;
 
 class Shannon : public Archiver
 {
@@ -159,8 +159,6 @@ public:
         std::vector<bool> resBits;
 
         int readBytes;
-        int blockSize = 1024;
-        std::vector<unsigned char> temp(blockSize);
         FileWriter* fileWriter = new FileWriter(outFile);
         std::queue<bool> bits;
         std::vector<unsigned char> tempBytesToWrite;
@@ -193,29 +191,34 @@ public:
             }
         }
 
+        int sz = codes->size();
         delete fileReader;
         fileReader = new FileReader(inputFile);
         do
         {
-            readBytes = fileReader->Read(&temp, blockSize);
-            
-            for (int i = 0; i < readBytes; ++i)
+            unsigned char byte = fileReader->ReadNextChar(readBytes);
+    
+            if (readBytes > 0)
             {
-                for (int j = 0; j < codes->at(temp.at(i))->size(); ++j)
+                for (int j = 0; j < codes->at(byte)->size(); ++j)
                 {
-                    bits.push(codes->at(temp.at(i))->at(j));
+                    bits.push(codes->at(byte)->at(j));
                 }
             }
 
+            sz = bits.size();
             tempBytesToWrite.clear();
             while (bits.size() >= 8)
             {
                 tempBytesToWrite.push_back(getByteFromQueue(&bits));
             }
 
-            fileWriter->Write(&tempBytesToWrite);
+            if (tempBytesToWrite.size() > 0)
+            {
+                fileWriter->Write(&tempBytesToWrite);
+            }
         }
-        while (readBytes == blockSize);
+        while (readBytes > 0);
 
         tempBytesToWrite.clear();
         unsigned char lastByteSize = bits.size();

@@ -21,21 +21,19 @@ class LZ77Archiver : public Archiver
 private:
     int historySize;
     int viewSize;
-    std::vector<LZ77Node*> nn;
 
-    int find(std::vector<unsigned char>& history, std::vector<unsigned char>& view, 
-             std::vector<unsigned char>& subvector)
+    int find(std::vector<unsigned char>& history, std::vector<unsigned char>& view, int length)
     {
         for (int i = history.size() - 1; i >= 0; --i)
         {
-            if (history[i] == subvector[0])
+            if (history[i] == view[0])
             {
                 int j;
                 int ii = i;
 
-                for (j = 0; j < std::min(history.size() - i, subvector.size()); ++j)
+                for (j = 0; j < std::min((int)history.size() - i, length);)
                 {
-                    if (history[ii] == subvector[j])
+                    if (history[ii] == view[j])
                     {
                         ++ii;
                         ++j;
@@ -46,25 +44,25 @@ private:
                     }
                 }
 
-                if (j < subvector.size() && ii == history.size()) 
+                if (j < length && ii == history.size()) 
                 {
                     int k = 0;
-                    for (k = 0; k < view.size() && j + k < subvector.size(); ++k)
+                    for (k = 0; k < view.size() && j + k < length; ++k)
                     {
-                        if (view[k] != subvector[j + k])
+                        if (view[k] != view[j + k])
                         {
                             break;
                         }
                     }
 
-                    if (k + j == subvector.size())
+                    if (k + j == length)
                     {
                         return i;
                     }
                 }
                 else
                 {
-                    if (j == subvector.size())
+                    if (j == length)
                     {
                         return i;
                     }
@@ -77,25 +75,11 @@ private:
 
     int doStep(std::vector<unsigned char>& history, std::vector<unsigned char>& view, std::vector<LZ77Node*>& nodes)
     {
-        // std::vector<unsigned char> unitedVector(history.size() + view.size());
-
-        // for (int i = 0; i < history.size(); ++i)
-        // {
-        //     unitedVector[i] = history[i];
-        // }
-
-        // for (int i = 0; i < view.size(); ++i)
-        // {
-        //     unitedVector[i + history.size()] = view[i];
-        // }
-
-        std::vector<unsigned char> vectorToFind;
         int foundIndex = -1;
         int i;
         for (i = 0; i < view.size() - 1; ++i)
         {
-            vectorToFind.push_back(view[i]);
-            int newFoundIndex = find(history, view, vectorToFind);
+            int newFoundIndex = find(history, view, i + 1);
 
             if (newFoundIndex == -1 || newFoundIndex >= history.size())
             {
@@ -122,12 +106,9 @@ private:
         int bitsPerOffset = (int)std::log2(historySize);
         int bitsPerLength = (int)std::log2(viewSize);
         std::vector<unsigned char> bytesToWrite;
-        int count = 0;
 
         for (LZ77Node* node : nodes)
         {
-            ++count;
-            nn.push_back(node);
             std::vector<bool> tempBits = getBitsFromInt(node->offset, bitsPerOffset);
             for (bool bit : tempBits)
             {
@@ -182,9 +163,15 @@ private:
 
             fileWriter->Write(&bytesToWrite);
         }
+
+        for (int i = 0; i < nodes.size(); ++i)
+        {
+            LZ77Node* node = nodes[0];
+            nodes.erase(nodes.begin());
+            delete node;
+        }
     }
 
-    
     void getLZ77Node(std::vector<bool>& bits, LZ77Node* node)
     {
         int offset = getIntFromBits(bits, (int)log2(historySize));
@@ -205,6 +192,10 @@ private:
         node->nextChar = byte;
     }
 
+    void pushByteToHistory(std::vector<unsigned char>& history, unsigned char byteToPush)
+    {
+        history.push_back(byteToPush);
+    }
 public:
     LZ77Archiver(int historySize, int viewSize)
     {
@@ -217,9 +208,10 @@ public:
         std::vector<unsigned char> history;
         std::vector<unsigned char> view;
         std::vector<LZ77Node*> nodes;
-
+        std::queue<bool> bits;
         int readBytes;
         FileReader* fileReader = new FileReader(inputFile);
+        FileWriter* fileWriter = new FileWriter(outFile);
 
         for (int i = 0; i < viewSize; ++i)
         {
@@ -254,45 +246,16 @@ public:
                     view.push_back(byte);
                 }
             }
+
+            writeNodesToFile(nodes, false, bits, fileWriter);
         }
         while (view.size() > 0);
 
-        std::queue<bool> bits;
-        FileWriter* fileWriter = new FileWriter(outFile);
         writeNodesToFile(nodes, true, bits, fileWriter);
 
         delete fileReader;
         delete fileWriter;
     }
-
-    // void DecodeNodes(std::vector<LZ77Node*>& nodes)
-    // {
-    //     std::vector<unsigned char> decodedBytes;
-
-    //     for (int i = 0; i < nodes.size(); ++i)
-    //     {
-    //         if (nodes[i]->length == 0 && nodes[i]->offset == 0)
-    //         {
-    //             decodedBytes.push_back(nodes[i]->nextChar);
-    //         }
-    //         else
-    //         {
-    //             int a = decodedBytes.size() - (nodes[i]->offset == 0 ? historySize : nodes[i]->offset);
-
-    //             for (int j = a; j < a + nodes[i]->length; ++j)
-    //             {
-    //                 decodedBytes.push_back(decodedBytes[j]);
-    //             }
-
-    //             decodedBytes.push_back(nodes[i]->nextChar);
-    //         }
-    //     }
-
-    //     FileWriter* fw = new FileWriter("asdasdsd");
-    //     fw->Write(&decodedBytes);
-
-    //     delete fw;
-    // }
 
     void Dearchive(const std::string inputFile, const std::string outFile) override
     {
@@ -301,42 +264,39 @@ public:
 
         int readBytes;
         int oneTripleSize = (int)log2(historySize) + (int)log2(viewSize) + 8;
-        std::vector<unsigned char> bytes(oneTripleSize);
-        std::vector<unsigned char> decodedBytes;
+        std::vector<unsigned char> bytes((int)std::pow(oneTripleSize, 5));
+        std::vector<unsigned char> history;
         LZ77Node* node = new LZ77Node();
-        int count = 0;
 
         do
         {
-            readBytes = fileReader->Read(&bytes, oneTripleSize);
+            readBytes = fileReader->Read(&bytes, (int)std::pow(oneTripleSize, 5));
             std::vector<bool> bits = getBitsFromBytes(bytes, readBytes);
-            size_t bitsSize = bits.size();
             while (bits.size() >= oneTripleSize)
             {
                 getLZ77Node(bits, node);
-                LZ77Node* nnn = nn[count++];
 
                 if (node->length == 0 && node->offset == 0)
                 {
-                    decodedBytes.push_back(node->nextChar);
+                    fileWriter->WriteByte(node->nextChar);
+                    pushByteToHistory(history, node->nextChar);
                 }
                 else
                 {
-                    int a = decodedBytes.size() - node->offset;
+                    int a = history.size() - node->offset;
 
                     for (int i = a; i < a + node->length; ++i)
                     {
-                        decodedBytes.push_back(decodedBytes[i]);
+                        fileWriter->WriteByte(history[i]);
+                        pushByteToHistory(history, history[i]);
                     }
 
-                    decodedBytes.push_back(node->nextChar);
-                }
+                    pushByteToHistory(history, node->nextChar);
+                    fileWriter->WriteByte(node->nextChar);
+                }   
             }
         }
         while (readBytes == oneTripleSize);
-
-        int sz = decodedBytes.size(); 
-        fileWriter->Write(&decodedBytes);
 
         delete node;
         delete fileWriter;
