@@ -204,8 +204,14 @@ public:
         fileStream->write((char*)(&byte), 1);
     }
 
+    void WriteString(std::string str)
+    {
+        (*fileStream) << str;
+    }
+
     ~FileWriter()
     {
+        fileStream->flush();
         fileStream->close();
         delete fileStream;
     }

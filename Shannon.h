@@ -223,7 +223,7 @@ public:
         tempBytesToWrite.clear();
         unsigned char lastByteSize = bits.size();
         unsigned char lastByte = 0;
-        for (int i = 7; i >= 0; ++i)
+        for (int i = 7; i >= 0; --i)
         {
             if (bits.empty())
             {

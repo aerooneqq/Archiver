@@ -264,13 +264,13 @@ public:
 
         int readBytes;
         int oneTripleSize = (int)log2(historySize) + (int)log2(viewSize) + 8;
-        std::vector<unsigned char> bytes((int)std::pow(oneTripleSize, 5));
+        std::vector<unsigned char> bytes(oneTripleSize );
         std::vector<unsigned char> history;
         LZ77Node* node = new LZ77Node();
 
         do
         {
-            readBytes = fileReader->Read(&bytes, (int)std::pow(oneTripleSize, 5));
+            readBytes = fileReader->Read(&bytes, oneTripleSize);
             std::vector<bool> bits = getBitsFromBytes(bytes, readBytes);
             while (bits.size() >= oneTripleSize)
             {
